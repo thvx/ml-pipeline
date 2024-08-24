@@ -1,8 +1,26 @@
-import pandas as pd
-import numpy as np
-import joblib
 import os
+import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import style
+from matplotlib.pylab import rcParams
+import seaborn as sns
+import warnings
+warnings.filterwarnings('ignore')
+
+# Set plot style
+rcParams['figure.figsize'] = (10, 5)
+plt.rcParams['axes.facecolor'] = 'white'
+
+# Preprocesamiento
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+
+# Exportación
+import joblib
+
+# Entrenamiento de modelos
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.ensemble import RandomForestClassifier
@@ -10,14 +28,53 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
+# Funciones de Preprocesamiento y Feature Engineering
+def array_to_df(X, columns):
+    return pd.DataFrame(X, columns=columns)
+
+def preprocessor_pipeline():
+    numeric_features = ['age', 'resting_blood_pressure', 'cholesterol', 'max_heart_rate_achieved', 'st_depression']
+    categorical_features = ['chest_pain_type', 'rest_ecg', 'st_slope', 'num_major_vessels', 'thalassemia']
+
+    numeric_transformer = Pipeline(steps=[
+        ('scaler', StandardScaler())
+    ])
+
+    categorical_transformer = Pipeline(steps=[
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))
+    ])
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numeric_transformer, numeric_features),
+            ('cat', categorical_transformer, categorical_features)
+        ]
+    )
+    return preprocessor
+
+def ensure_dir(file_path):
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+def create_and_save_pipeline():
+    preprocessor = preprocessor_pipeline()
+
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor)
+    ])
+
+    file_path = '../files/data_pipeline.pkl'
+    ensure_dir(file_path)
+    joblib.dump(pipeline, file_path)
+
 # Cargar el pipeline de preprocesamiento
 def load_preprocessing_pipeline():
     pipeline_path = '../files/data_pipeline.pkl'
     return joblib.load(pipeline_path)
 
 # Cargar y procesar el dataset
-#def load_and_process_data(filepath, preprocessor):
-def load_and_process_data(filepath):
+def load_and_process_data(filepath, preprocessor):
     df = pd.read_csv(filepath)
     df.columns = ['age', 'sex', 'chest_pain_type', 'resting_blood_pressure', 
                   'cholesterol', 'fasting_blood_sugar', 'rest_ecg', 
@@ -25,15 +82,18 @@ def load_and_process_data(filepath):
                   'st_depression', 'st_slope', 'num_major_vessels', 'thalassemia',
                   'target']
     df = df.dropna()
-    
+
     X = df.drop(columns='target')
     y = df['target']
     
-    # Aplicar el pipeline de preprocesamiento
-    #X_processed = preprocessor.transform(X)
+    # Ensure that columns exist before applying transformations
+    required_columns = set(['age', 'resting_blood_pressure', 'cholesterol', 'max_heart_rate_achieved', 'st_depression'])
+    if not required_columns.issubset(X.columns):
+        raise ValueError(f"Missing columns in input data: {required_columns - set(X.columns)}")
+
+    X_processed = preprocessor.fit_transform(X)
     
-    #return X_processed, y
-    return X, y
+    return X_processed, y
 
 # Separar datos en conjuntos de entrenamiento y prueba
 def separate_data(X, y):
@@ -119,9 +179,9 @@ def load_model(model_filepath):
 
 # Ejecutar el pipeline de entrenamiento y evaluación
 def run_ml(filepath):
-    #preprocessor = load_preprocessing_pipeline()
-    #X, y = load_and_process_data(filepath, preprocessor)
-    X, y = load_and_process_data(filepath)
+    create_and_save_pipeline()
+    preprocessor = load_preprocessing_pipeline()
+    X, y = load_and_process_data(filepath, preprocessor)
     X_train, X_test, y_train, y_test = separate_data(X, y)
     results = train_models(X_train, y_train, X_test, y_test)
     evaluate_models(results)
@@ -129,5 +189,5 @@ def run_ml(filepath):
 
 # Ejecutar el pipeline
 if __name__ == "__main__":
-    filepath = '../model/data/heart.csv'
+    filepath = 'model/training/heart.csv'
     run_ml(filepath)
